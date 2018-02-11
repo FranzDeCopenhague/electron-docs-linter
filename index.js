@@ -1,5 +1,6 @@
 const path = require('path')
 const API = require('./lib/api')
+const API18n = require('./lib/api18n')
 const fetchDocs = require('electron-docs')
 const promisify = require('pify')
 const semver = require('semver')
@@ -22,6 +23,29 @@ function remapTouchBar (apis) {
   })
   if (touchBarApi) touchBarApi.staticProperties = touchBarApis
   return newApis
+}
+
+function linti18n(docsPath, apis, callback) {
+  if (typeof callback !== 'function') {
+    throw new TypeError('Expected a callback function as third argument')
+  }
+  if (!exists(docsPath)) {
+    throw new TypeError(`\`path\` must be an existing path on the filesystem. Got: ${docsPath}`)
+  }
+  return fetchDocs(docsPath)
+    .then(function (docs) {
+      const seeds = deriveAPIDocs(docs, apis);
+
+      var apis18n = seeds.map(seed => {
+        return new API18n(seed)
+      })
+
+      return callback(null, apis18n)
+    })
+    .catch(function (err) {
+      console.error(err)
+      return callback(err)
+    })
 }
 
 function lint (docsPath, targetVersion, callback) {
@@ -66,6 +90,23 @@ function lint (docsPath, targetVersion, callback) {
     })
 }
 
+function deriveAPIDocs(docs, apis) {
+  const apidocs = []
+
+  docs
+      // Ignore files that aren't real APIs or data structures
+      .forEach(doc => {
+      var api = apis.find(api => api.slug === doc.slug);
+      if (api && api.filename === doc.filename) {
+        apidocs.push({ doc: doc, api: api })
+        return true;
+      }
+      return false;
+    })
+  
+  return apidocs
+}
+
 function deriveSeeds (docs) {
   const seeds = []
 
@@ -107,4 +148,4 @@ function deriveSeeds (docs) {
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 }
 
-module.exports = promisify(lint)
+module.exports = { lint : promisify(lint), linti18n : promisify(linti18n) }
